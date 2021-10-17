@@ -10,12 +10,23 @@
 #define TRUE 1
 #define FALSE 0
 
-
+// text model
 typedef struct {
-	char* text;
-	unsigned int len; // длина текста
+	// hold all text
+	char* txt;
+	// length of text
+	unsigned int len; 
 }text_t;
 
+/*
+* BREIF: Read text from file
+* ARGS:
+* text - text model
+* file - path of file
+* RETURN:
+* TRUE - if all ok
+* FALSE - some errors
+*/
 int TextReader(text_t* text, const char* file);
 
 #endif // _IF_TEXT_INCLUDE

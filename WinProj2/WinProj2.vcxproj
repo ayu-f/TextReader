@@ -140,7 +140,9 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="framework.h" />
+    <ClInclude Include="menu.h" />
     <ClInclude Include="Resource.h" />
+    <ClInclude Include="resource1.h" />
     <ClInclude Include="targetver.h" />
     <ClInclude Include="text.h" />
     <ClInclude Include="view.h" />
@@ -152,6 +154,7 @@
     <ClCompile Include="WinProj2.c" />
   </ItemGroup>
   <ItemGroup>
+    <ResourceCompile Include="Menu.rc" />
     <ResourceCompile Include="WinProj2.rc" />
   </ItemGroup>
   <ItemGroup>

@@ -4,32 +4,16 @@
 #define UNICODE
 #endif
 
-#include"text.h"
-#include"view.h"
-
-//void FixVertScroll(view_t* view) {
-//	unsigned i;
-//
-//	// Move scroll so it points to the same string it did before changing mode
-//	for (i = 0; i < view->linebreaksLen - 1; ++i)
-//		if (view->topSymb >= view->linebreaks[i] && view->topSymb < view->linebreaks[i + 1]) {
-//			view->vertScrollPos = i;
-//			break;
-//		}
-//}
-
+#include "text.h"
+#include "view.h"
+//#include "menu.h"
+#include "resource1.h"
 
 /*  Declare Windows procedure  */
 LRESULT CALLBACK WindowProcedure(HWND, UINT, WPARAM, LPARAM);
 
 /*  Make the class name into a global variable  */
 TCHAR szClassName[] = _T("CodeBlocksWindowsApp");
-
-typedef enum mode {
-	FORMATED,
-	ORIGINAL
-}mode_t;
-
 
 int WINAPI WinMain(HINSTANCE hThisInstance,
 	HINSTANCE hPrevInstance,
@@ -51,11 +35,11 @@ int WINAPI WinMain(HINSTANCE hThisInstance,
 	wincl.hIcon = LoadIcon(NULL, IDI_APPLICATION);
 	wincl.hIconSm = LoadIcon(NULL, IDI_APPLICATION);
 	wincl.hCursor = LoadCursor(NULL, IDC_ARROW);
-	wincl.lpszMenuName = NULL;                 /* No menu */
+	wincl.lpszMenuName = MAKEINTRESOURCE(IDR_MENU1);                /* No menu */
 	wincl.cbClsExtra = 0;                      /* No extra bytes after the window class */
 	wincl.cbWndExtra = 0;                      /* structure or the window instance */
 	/* Use Windows's default colour as the background of the window */
-	wincl.hbrBackground = (HBRUSH)COLOR_BACKGROUND;
+	wincl.hbrBackground = (HBRUSH)GetStockObject(WHITE_BRUSH);
 
 	/* Register the window class, and if it fails quit the program */
 	if (!RegisterClassEx(&wincl))
@@ -94,6 +78,7 @@ int WINAPI WinMain(HINSTANCE hThisInstance,
 }
 
 
+
 /*  This function is called by the Windows function DispatchMessage()  */
 
 LRESULT CALLBACK WindowProcedure(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
@@ -101,7 +86,8 @@ LRESULT CALLBACK WindowProcedure(HWND hwnd, UINT message, WPARAM wParam, LPARAM 
 	static text_t tx;
 	static view_t vw;
 	static SCROLLINFO si;
-	mode_t mode = FORMATED;
+	HMENU hMenu;
+
 	switch (message)                  // handle the messages
 	{
 	case WM_DESTROY:
@@ -115,37 +101,47 @@ LRESULT CALLBACK WindowProcedure(HWND hwnd, UINT message, WPARAM wParam, LPARAM 
 		}
 		VM_ViewInit(tx, &vw, WINH, WINW, hwnd);
 		VM_ParseText(tx, &vw);
-
-		// Set the vertical scrolling
-		si.cbSize = sizeof(si);
-		si.fMask = SIF_RANGE | SIF_PAGE;
-		si.nMin = 0;
-		si.nMax = vw.lineCountFormated - 1;
-		si.nPage = vw.heightWinInLines;
-		SetScrollInfo(hwnd, SB_VERT, &si, TRUE);
-
+		hMenu = GetMenu(hwnd);
+		CheckMenuItem(hMenu, ID_VIEW_WRAP, MF_CHECKED);
+	
 		break;
 	}
 	case WM_SIZE: {
-		VM_UpdateSize(&vw, LOWORD(lParam), HIWORD(lParam));
+		int xClient = LOWORD(lParam);
+		int yClient = HIWORD(lParam);
+		VM_UpdateSize(&vw, xClient, yClient);
 		free(vw.data);
 		vw.data = NULL;
 		VM_ParseText(tx, &vw);
+		VM_FixVertScrollPos(&vw);
+		VM_FixHorScrollPos(&vw);
+
 
 		// Set the vertical scrolling
 		si.cbSize = sizeof(si);
 		si.fMask = SIF_RANGE | SIF_PAGE;
 		si.nMin = 0;
-		si.nMax = vw.lineCountFormated - 1;
+		si.nMax = vw.mode == WRAP ? vw.lineCountFormated - 1 : vw.linesCount;
 		si.nPage = vw.heightWinInLines;
-		//si.nPos = 0;
+		si.nPos = vw.vertScrollPos;
 		SetScrollInfo(hwnd, SB_VERT, &si, TRUE);
+
+		// Set the horizontal scrolling
+		if (vw.mode == NOWRAP) {
+			si.cbSize = sizeof(si);
+			si.fMask = SIF_RANGE | SIF_PAGE;
+			si.nMin = 0;
+			si.nMax = vw.maxSymInLine;
+			si.nPage = vw.maxSymbCount;
+			SetScrollInfo(hwnd, SB_HORZ, &si, TRUE);
+		}
 
 		InvalidateRect(hwnd, NULL, TRUE);
 		UpdateWindow(hwnd);
 		break;
 	}
 	case WM_VSCROLL: {
+		//VertScroll(&vw, wParam, hwnd);
 		int yPos = 0;
 		int thumbPos, dividedPos;
 		si.cbSize = sizeof(si);
@@ -173,12 +169,6 @@ LRESULT CALLBACK WindowProcedure(HWND hwnd, UINT message, WPARAM wParam, LPARAM 
 			break;
 
 		case SB_THUMBTRACK: // dragged
-			/*thumbPos = HIWORD(wParam), dividedPos;
-			if (vw.heightWinInLines > 65535) {
-				dividedPos = (double)thumbPos / (double)65535;
-				thumbPos = (int)(dividedPos * (double)vw.heightWinInLines);
-			}
-			si.nPos = thumbPos - si.nPos;*/
 			si.nPos = si.nTrackPos;
 			break;
 
@@ -189,17 +179,82 @@ LRESULT CALLBACK WindowProcedure(HWND hwnd, UINT message, WPARAM wParam, LPARAM 
 		si.fMask = SIF_POS;
 		SetScrollInfo(hwnd, SB_VERT, &si, TRUE);
 		GetScrollInfo(hwnd, SB_VERT, &si);
-
+		vw.vertScrollPos += abs(yPos - si.nPos);
 		// If the position has changed, scroll window and update it.
 		if (si.nPos != yPos)
 		{
-			VM_ShiftVerticalFormated(&vw, yPos - si.nPos);
+			if (vw.mode == WRAP)
+				VM_ShiftVerticalWrap(&vw, yPos - si.nPos);
+			else
+				VM_ShiftVerticalNoWRap(&vw, yPos - si.nPos);
 			InvalidateRect(hwnd, NULL, TRUE);
 			UpdateWindow(hwnd);
 		}
 
 		break;
 	}
+	case WM_HSCROLL:
+		si.cbSize = sizeof(si);
+		si.fMask = SIF_ALL;
+		GetScrollInfo(hwnd, SB_HORZ, &si);
+		int xPos = si.nPos;
+		switch (LOWORD(wParam))
+		{
+		case SB_LINELEFT:
+			si.nPos -= 1;
+			break;
+		case SB_LINERIGHT:
+			si.nPos += 1;
+			break;
+		case SB_PAGELEFT:
+			si.nPos -= si.nPage;
+			break;
+		case SB_PAGERIGHT:
+			si.nPos += si.nPage;
+			break;
+		case SB_THUMBTRACK:
+			si.nPos = si.nTrackPos;
+			break;
+
+		default:
+			break;
+		}
+
+		si.fMask = SIF_POS;
+		SetScrollInfo(hwnd, SB_HORZ, &si, TRUE);
+		GetScrollInfo(hwnd, SB_HORZ, &si);
+
+		// If the position has changed, scroll the window.
+		if (si.nPos != xPos)
+		{
+			VW_ShiftHorizontal(&vw, xPos - si.nPos);
+			InvalidateRect(hwnd, NULL, TRUE);
+			UpdateWindow(hwnd);
+		}
+		break;
+	case WM_COMMAND:
+		hMenu = GetMenu(hwnd);
+
+		switch (LOWORD(wParam)) {
+		case ID_VIEW_WRAP:
+			// Switch layout checkbox and layout on/off mode
+			if (vw.mode == WRAP) {
+				CheckMenuItem(hMenu, ID_VIEW_WRAP, MF_UNCHECKED);
+				vw.mode = NOWRAP;
+				VM_FixVertScrollPos(&vw);
+			}
+			else {
+				CheckMenuItem(hMenu, ID_VIEW_WRAP, MF_CHECKED);
+				VM_FixVertScrollPos(&vw);
+				vw.mode = WRAP;
+			}
+			InvalidateRect(hwnd, NULL, TRUE);
+			UpdateWindow(hwnd);
+			break;
+		default:
+			break;
+		}
+		break;
 	case WM_PAINT: {
 		VM_DrawText(hwnd, &vw);
 		break;

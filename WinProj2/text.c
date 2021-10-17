@@ -10,11 +10,11 @@ int TextReader(text_t* text, const char* file) {
 	int bufLen = ftell(F);
 	fseek(F, 0, SEEK_SET);
 
-	if ((text->text = (char*)malloc(sizeof(char) * bufLen + 1)) == NULL)
+	if ((text->txt = (char*)malloc(sizeof(char) * bufLen + 1)) == NULL)
 		return FALSE;
 
-	text->len = fread(text->text, 1, bufLen, F);
-	text->text[text->len] = '\0';
+	text->len = fread(text->txt, 1, bufLen, F);
+	text->txt[text->len] = '\0';
 
 	fclose(F);
 	return TRUE;
