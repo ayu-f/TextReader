@@ -29,4 +29,6 @@ typedef struct {
 */
 int TextReader(text_t* text, const char* file);
 
+void FreeText(text_t* tx);
+
 #endif // _IF_TEXT_INCLUDE

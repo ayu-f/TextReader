@@ -19,3 +19,10 @@ int TextReader(text_t* text, const char* file) {
 	fclose(F);
 	return TRUE;
 }
+
+void FreeText(text_t* tx) {
+	if (tx->txt != NULL)
+		free(tx->txt);
+	tx->txt = NULL;
+	tx->len = 0;
+}

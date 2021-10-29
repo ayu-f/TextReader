@@ -143,12 +143,14 @@
     <ClInclude Include="menu.h" />
     <ClInclude Include="Resource.h" />
     <ClInclude Include="resource1.h" />
+    <ClInclude Include="scroll.h" />
     <ClInclude Include="targetver.h" />
     <ClInclude Include="text.h" />
     <ClInclude Include="view.h" />
     <ClInclude Include="WinProj2.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="scroll.c" />
     <ClCompile Include="text.c" />
     <ClCompile Include="view.c" />
     <ClCompile Include="WinProj2.c" />

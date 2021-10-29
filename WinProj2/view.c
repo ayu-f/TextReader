@@ -1,6 +1,6 @@
 #include "view.h"
 
-int VM_ViewInit(text_t tx, view_t* vw, int winH, int winW, HWND hwnd) {
+int VM_ViewInit(text_t tx, view_t* vw, HWND hwnd) {
 	int isChar = 0, lineReserve = 0;
 	RECT wndRect;
 	GetClientRect(hwnd, &wndRect);
@@ -17,6 +17,10 @@ int VM_ViewInit(text_t tx, view_t* vw, int winH, int winW, HWND hwnd) {
 
 	vw->vertScrollPos = 0;
 	vw->horzScrollPos = 0;
+	vw->vertScrollPosMax = 0;
+	vw->horzScrollPosMax = 0;
+	vw->vertScrollUnit = 0;
+	vw->horzScrollUnit = 0;
 
 	HDC hdc = GetDC(hwnd);
 	HFONT textFont = CreateFont(FONT_SIZE, FONT_WIDTH, 0, 0, FW_REGULAR, FALSE, FALSE, FALSE, RUSSIAN_CHARSET, OUT_DEFAULT_PRECIS, OUT_OUTLINE_PRECIS, PROOF_QUALITY, FF_MODERN, NULL);
@@ -49,13 +53,23 @@ int VM_ViewInit(text_t tx, view_t* vw, int winH, int winW, HWND hwnd) {
 }
 
 void VM_FixVertScrollPos(view_t* vw) {
+	if (vw->data == NULL)
+		return;
 	int i, totalCurLen = ceil((double)vw->data[vw->firstLine].lineLen / (double)vw->maxSymbCount);
+	if (vw->mode == NOWRAP) {
+		vw->cntSubline = 0;
+		if (vw->linesCount - vw->firstLine < vw->heightWinInLines && vw->linesCount > vw->heightWinInLines) {
+			vw->firstLine = vw->linesCount - vw->heightWinInLines;
+		}
+		vw->vertScrollPos = vw->firstLine;
+		return;
+	}
 	vw->vertScrollPos = 0;
 	if (totalCurLen - 1 < vw->cntSubline) {
 		vw->cntSubline = totalCurLen - 1;
 	}
 
-	// count new scroll position
+	// new position of scroll
 	vw->vertScrollPos = 0;
 	for (i = 0; i < vw->firstLine; i++) {
 		totalCurLen = ceil((double)vw->data[i].lineLen / (double)vw->maxSymbCount);
@@ -68,15 +82,16 @@ void VM_FixVertScrollPos(view_t* vw) {
 
 	if (vw->lineCountFormated - vw->vertScrollPos < vw->heightWinInLines && vw->lineCountFormated > vw->heightWinInLines) {
 		VM_ShiftVerticalWrap(vw, abs(vw->heightWinInLines - (vw->lineCountFormated - vw->vertScrollPos)));
-		vw->vertScrollPos = MAX(0, vw->vertScrollPos - (vw->heightWinInLines - (vw->lineCountFormated - vw->vertScrollPos)));
+		vw->vertScrollPos = MAX(0, vw->vertScrollPos - (vw->heightWinInLines - vw->lineCountFormated + vw->vertScrollPos));
 	}
+	if (vw->vertScrollPosMax == 0)
+		vw->cntSubline = 0;
 }
 
 void VM_FixHorScrollPos(view_t* vw) {
-
 	if (vw->maxSymInLine - vw->horzScrollPos < vw->maxSymbCount && vw->maxSymInLine > vw->maxSymbCount) {
-		VW_ShiftHorizontal(vw, -abs(vw->maxSymbCount - (vw->maxSymInLine - vw->horzScrollPos)));
-		vw->horzScrollPos = MAX(0, vw->horzScrollPos - (vw->maxSymbCount - (vw->maxSymInLine - vw->horzScrollPos)));
+		VM_ShiftHorizontal(vw, -abs(vw->maxSymbCount - (vw->maxSymInLine - vw->horzScrollPos)));
+		vw->horzScrollPos = MAX(0, vw->horzScrollPos - (vw->maxSymbCount - vw->maxSymInLine + vw->horzScrollPos));
 	}
 }
 
@@ -96,8 +111,7 @@ int VM_ParseText(text_t tx, view_t* vw) {
 					vw->maxSymInLine = i - iBegin;
 
 				if (i - iBegin > vw->maxSymbCount) { // считаем количество строк занимаемых текстом при формате с версткой
-					vw->lineCountFormated += (i - iBegin) / vw->maxSymbCount;
-					vw->lineCountFormated += (i - iBegin) % vw->maxSymbCount == 0 ? 0 : 1;
+					vw->lineCountFormated += ceil((double)(i - iBegin) / (double)vw->maxSymbCount);//(i - iBegin) % vw->maxSymbCount == 0 ? 0 : 1;
 				}
 				else
 					vw->lineCountFormated++;
@@ -111,17 +125,37 @@ int VM_ParseText(text_t tx, view_t* vw) {
 	return TRUE;
 }
 
-void VM_UpdateSize(view_t* vw, int winW, int winH) { // обновить размер окна
-	if (winH < 0 || winW < 0)
+void VM_RecountLines(view_t* vw) {
+	if (vw->data == NULL)
 		return;
+	vw->lineCountFormated = 0;
+	for (int i = 0; i < vw->linesCount; i++)
+	{
+		if (vw->data[i].lineLen > vw->maxSymbCount) { // считаем количество строк занимаемых текстом при формате с версткой
+			vw->lineCountFormated += ceil((double)(vw->data[i].lineLen) / (double)vw->maxSymbCount);//(i - iBegin) % vw->maxSymbCount == 0 ? 0 : 1;
+		}
+		else
+			vw->lineCountFormated++;
+	}
+}
 
-	vw->winSize.h = winH;
-	vw->winSize.w = winW;
-	vw->maxSymbCount = winW / FONT_WIDTH;
-	vw->heightWinInLines = winH / FONT_SIZE;
-
-	vw->vertScrollUnit = ceil(vw->lineCountFormated / (int)SCROLL_MAX_RANGE);
-	vw->horzScrollUnit = ceil(vw->maxSymInLine / (int)SCROLL_MAX_RANGE);
+void VM_UpdateSize(view_t* vw, int winW, int winH) { // обновить размер окна
+	if (winH > 0 || winW > 0) {
+		vw->winSize.h = winH;
+		vw->winSize.w = winW;
+		vw->maxSymbCount = winW / FONT_WIDTH;
+		vw->heightWinInLines = winH / FONT_SIZE;
+	}
+	double a = ceil(vw->lineCountFormated / (int)SCROLL_MAX_RANGE);
+	if (vw->mode == WRAP) {
+		vw->vertScrollUnit = ceil((double)vw->lineCountFormated / (double)SCROLL_MAX_RANGE);
+		vw->horzScrollUnit = ceil((double)vw->maxSymbCount / (double)SCROLL_MAX_RANGE);
+	}
+	else {
+		vw->vertScrollUnit = ceil((double)vw->linesCount / (double)SCROLL_MAX_RANGE);
+		vw->horzScrollUnit = ceil((double)vw->maxSymInLine / (double)SCROLL_MAX_RANGE);
+	}
+	
 }
 
 int VM_CountTotalLinesInWin(view_t* vw) { // подсчитать количество (в определениях текста) напечатанных строк вместе с версткой
@@ -197,10 +231,10 @@ void VM_ShiftVerticalWrap(view_t* vw, int shift) {  // скролл  вертикально
 	}
 }
 
-void VW_ShiftHorizontal(view_t* vw, int shift) {
+void VM_ShiftHorizontal(view_t* vw, int shift) {
 	int move = abs(shift);
 	if (shift < 0) { // вправо
-		vw->horzScrollPos = MIN(vw->maxSymInLine, vw->horzScrollPos + move);
+		vw->horzScrollPos = MIN(vw->maxSymInLine - vw->maxSymbCount, vw->horzScrollPos + move);
 	}
 	else {
 		vw->horzScrollPos = MAX(0, vw->horzScrollPos - move);
@@ -209,14 +243,19 @@ void VW_ShiftHorizontal(view_t* vw, int shift) {
 
 // drawing text
 void VM_DrawText(HWND hwnd, view_t* vw) {
+	
 	RECT ScreenRect;
 	PAINTSTRUCT ps;
-	HDC hdc = BeginPaint(hwnd, &ps);
+	HDC hdc;
 	int x = 0; // сдвиг в каждой строке
 	int iLine = vw->firstLine, drawnLine = 0;
 	int tmpSubln = vw->cntSubline;
 	char* toDrawStr = NULL;
 	int toDrawLen = 0;
+	if (vw->data == NULL)
+		return;
+
+	hdc = BeginPaint(hwnd, &ps);
 	GetClientRect(hwnd, &ScreenRect);
 	if (vw->mode == WRAP) {
 		for (int i = 0; i < vw->heightWinInLines && iLine < vw->linesCount; i++)
@@ -233,7 +272,6 @@ void VM_DrawText(HWND hwnd, view_t* vw) {
 				x = 0;
 				tmpSubln = 0; // обнуляем, тк строка уже полностью напечатана (ее длина меньше макс. элементов в строке)
 			}
-
 		}
 	}
 	else if (vw->mode == NOWRAP) {
@@ -241,6 +279,9 @@ void VM_DrawText(HWND hwnd, view_t* vw) {
 		{
 			toDrawStr = vw->data[iLine].line + vw->horzScrollPos;
 			toDrawLen = vw->data[iLine].lineLen - vw->horzScrollPos;
+			if (toDrawLen > 0)
+				toDrawLen = MIN(toDrawLen, vw->maxSymbCount);
+
 			TextOut(hdc, ScreenRect.left, ScreenRect.top + drawnLine++ * FONT_SIZE, toDrawStr, toDrawLen);
 			iLine++;
 		}

@@ -69,7 +69,7 @@ RETURN:
 TRUE - if all ok
 FALSE - some error 
 */
-int VM_ViewInit(text_t tx, view_t* vw, int winH, int winW, HWND hwnd); // init
+int VM_ViewInit(text_t tx, view_t* vw, HWND hwnd); // init
 
 /*
 BRIEF: Separate text to the lines ended \n and count the lines in ClientWindow when mode == wrap
@@ -142,7 +142,7 @@ void VM_FixVertScrollPos(view_t* vw);
 * shift - shift of scroll. shift < 0 - scroll right, shift > 0 - scroll left
 * RETURN: None
 */
-void VW_ShiftHorizontal(view_t* vw, int shift);
+void VM_ShiftHorizontal(view_t* vw, int shift);
 
 /*
 * BRIEF: count new horizontal scroll position
@@ -152,5 +152,7 @@ void VW_ShiftHorizontal(view_t* vw, int shift);
 * RETURN: None
 */
 void VM_FixHorScrollPos(view_t* vw);
+
+void VM_RecountLines(view_t* vw);
 
 #endif // _IF_VIEW_INCLUDE

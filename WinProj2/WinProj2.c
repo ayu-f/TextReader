@@ -4,10 +4,16 @@
 #define UNICODE
 #endif
 
+#define __CRTDBG_MAP_ALLOC
+#include <crtdbg.h>
+#define DEBUG_NEW new(_NORMAL_BLOCK, __FILE__, __LINE__)
+#define new DEBUG_NEW
+
 #include "text.h"
 #include "view.h"
 //#include "menu.h"
 #include "resource1.h"
+#include"scroll.h"
 
 /*  Declare Windows procedure  */
 LRESULT CALLBACK WindowProcedure(HWND, UINT, WPARAM, LPARAM);
@@ -77,8 +83,6 @@ int WINAPI WinMain(HINSTANCE hThisInstance,
 	return messages.wParam;
 }
 
-
-
 /*  This function is called by the Windows function DispatchMessage()  */
 
 LRESULT CALLBACK WindowProcedure(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
@@ -88,10 +92,13 @@ LRESULT CALLBACK WindowProcedure(HWND hwnd, UINT message, WPARAM wParam, LPARAM 
 	static SCROLLINFO si;
 	HMENU hMenu;
 
-	switch (message)                  // handle the messages
+	switch (message)           // handle the messages
 	{
 	case WM_DESTROY:
-		PostQuitMessage(0);       // send a WM_QUIT to the message queue
+		FreeText(&tx);
+		free(vw.data);
+		PostQuitMessage(0); 
+		_CrtDumpMemoryLeaks();
 		break;
 	case WM_CREATE: {
 		CREATESTRUCT* structPar = (CREATESTRUCT*)lParam;
@@ -99,145 +106,72 @@ LRESULT CALLBACK WindowProcedure(HWND hwnd, UINT message, WPARAM wParam, LPARAM 
 		if (TextReader(&tx, (char*)structPar->lpCreateParams) == FALSE) {
 			PostQuitMessage(0);
 		}
-		VM_ViewInit(tx, &vw, WINH, WINW, hwnd);
+		VM_ViewInit(tx, &vw, hwnd);
 		VM_ParseText(tx, &vw);
 		hMenu = GetMenu(hwnd);
 		CheckMenuItem(hMenu, ID_VIEW_WRAP, MF_CHECKED);
-	
+
 		break;
 	}
 	case WM_SIZE: {
 		int xClient = LOWORD(lParam);
 		int yClient = HIWORD(lParam);
 		VM_UpdateSize(&vw, xClient, yClient);
-		free(vw.data);
-		vw.data = NULL;
-		VM_ParseText(tx, &vw);
-		VM_FixVertScrollPos(&vw);
-		VM_FixHorScrollPos(&vw);
-
-
-		// Set the vertical scrolling
-		si.cbSize = sizeof(si);
-		si.fMask = SIF_RANGE | SIF_PAGE;
-		si.nMin = 0;
-		si.nMax = vw.mode == WRAP ? vw.lineCountFormated - 1 : vw.linesCount;
-		si.nPage = vw.heightWinInLines;
-		si.nPos = vw.vertScrollPos;
-		SetScrollInfo(hwnd, SB_VERT, &si, TRUE);
-
-		// Set the horizontal scrolling
-		if (vw.mode == NOWRAP) {
-			si.cbSize = sizeof(si);
-			si.fMask = SIF_RANGE | SIF_PAGE;
-			si.nMin = 0;
-			si.nMax = vw.maxSymInLine;
-			si.nPage = vw.maxSymbCount;
-			SetScrollInfo(hwnd, SB_HORZ, &si, TRUE);
+		VM_RecountLines(&vw);
+		if (vw.mode == WRAP) {
+			VM_FixVertScrollPos(&vw);
 		}
+		else {
+			VM_FixHorScrollPos(&vw);
+		}
+
+		ResizeVertScroll(&vw, hwnd);
+		ResizeHorzScroll(&vw, hwnd);
 
 		InvalidateRect(hwnd, NULL, TRUE);
 		UpdateWindow(hwnd);
 		break;
 	}
 	case WM_VSCROLL: {
-		//VertScroll(&vw, wParam, hwnd);
-		int yPos = 0;
-		int thumbPos, dividedPos;
-		si.cbSize = sizeof(si);
-		si.fMask = SIF_ALL;
-		GetScrollInfo(hwnd, SB_VERT, &si);
-
-		// Save the position
-		yPos = si.nPos;
-		switch (LOWORD(wParam))
-		{
-		case SB_LINEUP: // top arrow
-			si.nPos -= 1;
-			break;
-
-		case SB_LINEDOWN: // bottom arrow
-			si.nPos += 1;
-			break;
-
-		case SB_PAGEUP:
-			si.nPos -= si.nPage;
-			break;
-
-		case SB_PAGEDOWN:
-			si.nPos += si.nPage;
-			break;
-
-		case SB_THUMBTRACK: // dragged
-			si.nPos = si.nTrackPos;
-			break;
-
-		default:
-			break;
-		}
-
-		si.fMask = SIF_POS;
-		SetScrollInfo(hwnd, SB_VERT, &si, TRUE);
-		GetScrollInfo(hwnd, SB_VERT, &si);
-		vw.vertScrollPos += abs(yPos - si.nPos);
-		// If the position has changed, scroll window and update it.
-		if (si.nPos != yPos)
-		{
-			if (vw.mode == WRAP)
-				VM_ShiftVerticalWrap(&vw, yPos - si.nPos);
-			else
-				VM_ShiftVerticalNoWRap(&vw, yPos - si.nPos);
-			InvalidateRect(hwnd, NULL, TRUE);
-			UpdateWindow(hwnd);
-		}
-
+		VertScroll(&vw, wParam, hwnd);
 		break;
 	}
-	case WM_HSCROLL:
-		si.cbSize = sizeof(si);
-		si.fMask = SIF_ALL;
-		GetScrollInfo(hwnd, SB_HORZ, &si);
-		int xPos = si.nPos;
-		switch (LOWORD(wParam))
-		{
-		case SB_LINELEFT:
-			si.nPos -= 1;
-			break;
-		case SB_LINERIGHT:
-			si.nPos += 1;
-			break;
-		case SB_PAGELEFT:
-			si.nPos -= si.nPage;
-			break;
-		case SB_PAGERIGHT:
-			si.nPos += si.nPage;
-			break;
-		case SB_THUMBTRACK:
-			si.nPos = si.nTrackPos;
-			break;
-
-		default:
-			break;
-		}
-
-		si.fMask = SIF_POS;
-		SetScrollInfo(hwnd, SB_HORZ, &si, TRUE);
-		GetScrollInfo(hwnd, SB_HORZ, &si);
-
-		// If the position has changed, scroll the window.
-		if (si.nPos != xPos)
-		{
-			VW_ShiftHorizontal(&vw, xPos - si.nPos);
-			InvalidateRect(hwnd, NULL, TRUE);
-			UpdateWindow(hwnd);
-		}
+	case WM_HSCROLL: {
+		HorzScroll(&vw, wParam, hwnd);
 		break;
-	case WM_COMMAND:
+	}
+	case WM_COMMAND: {
+		OPENFILENAME ofn;
+		char filename[MAX_PATH];
 		hMenu = GetMenu(hwnd);
 
 		switch (LOWORD(wParam)) {
+		case ID_FILE_OPEN: {
+			ZeroMemory(&ofn, sizeof(OPENFILENAME));
+			ofn.lStructSize = sizeof(OPENFILENAME);
+			ofn.hwndOwner = hwnd;
+			ofn.lpstrFile = filename;
+			ofn.lpstrFile[0] = '\0';
+			ofn.nMaxFile = sizeof(filename);
+			ofn.lpstrFilter = "Text Files(*.txt)\0*.txt\0";
+			ofn.nFilterIndex = 1;
+			ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
+			if (GetOpenFileNameA(&ofn)) {
+				FreeText(&tx);
+				free(vw.data);
+				TextReader(&tx, ofn.lpstrFile);
+
+				if (!(VM_ViewInit(tx, &vw, hwnd) == TRUE && VM_ParseText(tx, &vw) == TRUE)) {
+					FreeText(&tx);
+					MessageBox(hwnd, _T("Memory Error"), _T("Error"), MB_ICONERROR);
+					PostQuitMessage(0);
+				}
+			}
+			SendMessage(hwnd, WM_SIZE, 0, (LPARAM)NULL);
+			break;
+		}
 		case ID_VIEW_WRAP:
-			// Switch layout checkbox and layout on/off mode
+			// Switch wrap checkbox and mode in view model
 			if (vw.mode == WRAP) {
 				CheckMenuItem(hMenu, ID_VIEW_WRAP, MF_UNCHECKED);
 				vw.mode = NOWRAP;
@@ -245,16 +179,32 @@ LRESULT CALLBACK WindowProcedure(HWND hwnd, UINT message, WPARAM wParam, LPARAM 
 			}
 			else {
 				CheckMenuItem(hMenu, ID_VIEW_WRAP, MF_CHECKED);
-				VM_FixVertScrollPos(&vw);
 				vw.mode = WRAP;
 			}
-			InvalidateRect(hwnd, NULL, TRUE);
-			UpdateWindow(hwnd);
+			SendMessage(hwnd, WM_SIZE, 0, (LPARAM)NULL); // send wm_size
+			int tmpVertScrl = vw.vertScrollPos;
+			if (vw.vertScrollPosMax > SCROLL_MAX_RANGE) {
+				double dividedPos = (double)tmpVertScrl / (double)vw.vertScrollPosMax;
+				tmpVertScrl = (int)(dividedPos * (double)SCROLL_MAX_RANGE);
+			}
+			SetScrollPos(hwnd, SB_VERT, tmpVertScrl, TRUE);
 			break;
+		case ID_FILE_CLOSE: {
+			FreeText(&tx);
+			free(vw.data);
+			vw.data = NULL;
+			SendMessage(hwnd, WM_SIZE, 0, (LPARAM)NULL);
+			break;
+		}
+		case ID_FILE_EXIT: {
+			SendMessage(hwnd, WM_DESTROY, 0, (LPARAM)NULL);
+			break;
+		}
 		default:
 			break;
 		}
 		break;
+	}
 	case WM_PAINT: {
 		VM_DrawText(hwnd, &vw);
 		break;
@@ -262,6 +212,6 @@ LRESULT CALLBACK WindowProcedure(HWND hwnd, UINT message, WPARAM wParam, LPARAM 
 	default:                      // for messages that we don't deal with
 		return DefWindowProc(hwnd, message, wParam, lParam);
 	}
-
+	
 	return 0;
 }
