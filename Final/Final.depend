@@ -1,0 +1,34 @@
+# depslib dependency file v1.0
+1636804923 source:c:\users\aalek\projects\codeblocks\final\main.c
+	<crtdbg.h>
+	"text.h"
+	"view.h"
+	"resource1.h"
+	"scroll.h"
+
+1635937444 c:\users\aalek\projects\codeblocks\final\text.h
+	<tchar.h>
+	<stdio.h>
+	<windows.h>
+	<math.h>
+
+1635942890 c:\users\aalek\projects\codeblocks\final\view.h
+	"text.h"
+
+1635942773 c:\users\aalek\projects\codeblocks\final\resource1.h
+
+1636299544 c:\users\aalek\projects\codeblocks\final\scroll.h
+	"view.h"
+
+1636656995 source:c:\users\aalek\projects\codeblocks\final\scroll.c
+	"scroll.h"
+
+1635514765 source:c:\users\aalek\projects\codeblocks\final\text.c
+	"text.h"
+
+1636817841 source:c:\users\aalek\projects\codeblocks\final\view.c
+	"view.h"
+
+1635937829 source:c:\users\aalek\projects\codeblocks\final\menu.rc
+	"resource1.h"
+
